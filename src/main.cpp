@@ -21,15 +21,18 @@
 #include "HardwareTimer.h"
 #include <encoder_counter.h>
 
+// Define task timings here
+float encoder_timing = 5;
+float linear_pot_timing = 5;
+
 // Define shares and queues here
 
-Queue<uint16_t> linearPot_queue (10);
-Queue<uint16_t> encoder_queue (10);
+Queue<int16_t> linearPot_queue (5);
+Queue<int16_t> encoder_queue (5);
 Queue<int16_t> accelerations (4);
 
-Share<int32_t> torque_share ("Torque");
-Share<float> pwm_share ("Duty Cycle");
-Share<bool> pwm_direction_share ("Motor Direction");
+Share<float> duty_cycle_share ("Duty Cycle");
+Share<bool> mot_dir_share ("Motor Direction");
 
 
 /** @brief   Read the current value from the IMU
@@ -73,8 +76,6 @@ void task_IMU (void* p_params)
     int16_t accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
     accelerations.butt_in (accelerometer_z);
     accelerations.butt_in (accelerometer_y);
-    // Serial << endl << "Y accel: " << accelerometer_y<< " || Z accel: " << accelerometer_z << endl; 
-    // Serial << endl << "Y accel: " << calib_y << " || Z accel: " << calib_z << endl; 
     vTaskDelay(100);
   }
 }
@@ -93,8 +94,9 @@ void task_stateController (void* p_params)
   (void) p_params;                    // Does nothing but silences a compiler warning
   int16_t yaccel, zaccel, beam_angle; // values that hold the current y acceleration, z acceleration and beam angle.
   uint8_t state = 0;                  // State of the state machine
-  uint16_t linpot_pos_old, linpot_pos_new, linpot_vel;
-  uint16_t state_r, r_dot, theta, theta_dot;
+  int16_t linpot_pos_old, linpot_pos_new;
+  int16_t encoder_old, encoder_new;
+  int16_t stateR, r_dot, theta, theta_dot;
   float controller_period = 60;
   
   for (;;)
@@ -106,7 +108,7 @@ void task_stateController (void* p_params)
       accelerations.get(yaccel);
       accelerations.get(zaccel);
       beam_angle = incline_angle(yaccel,zaccel);
-      pwm_share.put(30);     // Make motor move slowly as it tries to find an angle close to 0 degrees. 
+      duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees. 
       if (beam_angle >= abs(1))   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
       {
         state = 1;
@@ -121,9 +123,16 @@ void task_stateController (void* p_params)
       // Calculate states for the radial direction
       linearPot_queue.get(linpot_pos_new);   // Pull the newest value from the queue first
       linearPot_queue.get(linpot_pos_old);   // Pull the second newest value from the queue
-      state_r = linpot_pos_new;              // The first pulled value is the most recently updated position of the ball.
+      stateR = linpot_pos_new;              // The first pulled value is the most recently updated position of the ball.
       // Dividing the positions by the period of the task yields the average velocity of the ball.
-      r_dot = (linpot_pos_new-linpot_pos_old)/(controller_period);
+      r_dot = (linpot_pos_new-linpot_pos_old)/(linear_pot_timing);
+
+      // Calculate states for the theta directions
+      encoder_queue.get(encoder_new);     // Pull the newest value from the queue first
+      encoder_queue.get(encoder_old);     // Pull the second newest value from the queue
+      theta = encoder_new;                // The first pulled value is the most recently updated angle [rad]
+      // Dividing the encoder values by the period of the task yields the angular velocity of the motor.
+      theta_dot = (encoder_new-encoder_old)/encoder_timing; 
 
       // Insert Control Algorithm Code here
     }
@@ -141,30 +150,22 @@ void task_stateController (void* p_params)
 void task_encoder (void* p_params)
 {
   (void) p_params;    // Does nothing but silences a compiler warning
-  STM32Encoder timer_3 (TIM3, PB4, PB5);
-  int16_t curr_pos;
+  STM32Encoder timer_3 (TIM3, PB4, PB5);  // Initialize timer 3 channel 1 and channel 2 in encoder mode
+  int16_t curr_pos;        // Tick reading from encoder
+  const float PPR = 360;   // Define number of pulses per revolution for DC motor
   for(;;) 
   {
     curr_pos = timer_3.getCount(); // Get current position from encoder count
-    linearPot_queue.put(curr_pos); // Place current position into queue
+    curr_pos = curr_pos/PPR*2*PI;  // Normalize encoder tick reading and then multiply by 2PI to find position in terms of rads
+    linearPot_queue.put(curr_pos); // Place current position [rad] into queue
+
+    vTaskDelay(encoder_timing);
   }
 }
 
-/** @brief   Determines the correct PWM output based on the desired torque
- *  @details The following task calculates the PWM value necessary to output the torque (from @c torque_share ) that is
- *           calculated by the state controller task. Every time the task runs, it writes the necessary
- *           PWM value into @c pwm_share.
- *  @param   p_params A pointer to function parameters which are not used.
- */
-void task_motorControl (void* p_params)    // ZACH's to relate torque to PWM
-{
-  (void) p_params;    // Does nothing but silences a compiler warning
-}
-
-
 /** @brief   Outputs appropriate PWM value to motor
- *  @details The following task reads from @c pwm_share to write the correct duty cycle value to the motor driver chip.
- *           Additionally, the direction of the motor is determined from @c pwm_direction_share which is sent to the 
+ *  @details The following task reads from @c duty_cycle_share to write the correct duty cycle value to the motor driver chip.
+ *           Additionally, the direction of the motor is determined from @c mot_dir_share which is sent to the 
  *           PH pin of the motor driver chip. In short, one pin receives the PWM signal (always positive) while the other
  *           pin determines the direction of the motor based on logic HIGH/LOW.
  *  @param   p_params A point to function parameters which are not used.
@@ -184,16 +185,18 @@ void task_motorDriver (void* p_params)
 
   for (;;)
   {
-    pwm_share.get(duty_cycle_var);            // Duty cycle provided is always a positive value
-    pwm_direction_share.get(motor_direction); // This bool determines the direction which the motor should be driven in.
-    digitalWrite(PA8, motor_direction);      // Set direction of motor
-    analogWrite(PB10, duty_cycle_var);      // Run motor at this duty cycle
+    duty_cycle_share.get(duty_cycle_var);            // Duty cycle provided is always a positive value
+    mot_dir_share.get(motor_direction); // This bool determines the direction which the motor should be driven in.
+    digitalWrite(PA8, motor_direction);       // Set direction of motor
+    analogWrite(PB10, duty_cycle_var);        // Run motor at this duty cycle
   }
 }
 
 /** @brief   Reads value from Linear Potentiometer
- *  @details The following task reads the current signal value from the linear potentiometer. The values will
- *           then be written into a queue such that the current position and average velocity can be found.
+ *  @details The following task reads the voltage reading from the linear potentiometer. The value is then
+ *           normalized and then written into a queue such that the current position and average velocity can be found.
+ * 
+ *           Note: @c analogRead() provides 0 - 1023 reading from 0 - 3.3 V
  *  @param   p_params A point to function parameters which are not used.
  */
 void task_linearpot (void* p_params)
@@ -205,8 +208,9 @@ void task_linearpot (void* p_params)
 
   for(;;)
   {
-    linpot_reading = analogRead(PA1);       // Read current position of the bearing on the rail
-    linearPot_queue.butt_in(linpot_reading); // Store newest value of position at the front of the queue
+    linpot_reading = analogRead(PA1);           // Read voltage reading from linear potentiometer
+    linpot_reading = linpot_reading/1023*12-6;    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
+    linearPot_queue.butt_in(linpot_reading);    // Store position of the ball on the beam into the front of the queue.
   }
 }
 
@@ -214,6 +218,7 @@ void task_linearpot (void* p_params)
 void setup() {
   // Start the Serial Port
   Serial.begin(115200);
+  delay(2000);
   
   // Create Linear Potentiometer Task
   xTaskCreate (task_linearpot,
@@ -256,13 +261,6 @@ void setup() {
                2,
                NULL);
   
-  // Create Motor/Current Controller Task
-  xTaskCreate (task_motorControl,
-               "Current/Torque Control",
-               1536,
-               NULL,
-               2,
-               NULL);
   vTaskStartScheduler ();
 }
 
