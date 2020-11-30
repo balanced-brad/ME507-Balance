@@ -98,6 +98,26 @@ void task_stateController (void* p_params)
   int16_t encoder_old, encoder_new;
   int16_t stateR, r_dot, theta, theta_dot;
   float controller_period = 60;
+
+  int8_t K1 = -78;    //Gain matrix element 1
+  int8_t K2 = -14;    //Gain matrix element 2
+  int16_t K3 = 899;   //Gain matrix element 3
+  int8_t K4 = 86;     //Gain matrix element 4
+
+  uint8_t Kp_gain_motor = 0.01;  //Gain of the motor controller 
+  uint16_t R_IPROPI = 1800;   //Will be different for Bradley
+  uint8_t V_ipropi;
+  float Kt_motor = 175.5;      //motor torque constant [ozf-in/A] (different for Bradley)
+  float I_ipropi;             //current in uA
+  float I_motor;              //current from the motor driver [A]
+  float torque_desired;       //torque desired from the motor [lbm-in^2/s^2] from feedback gain matrix
+  float torque_actual;        //actual torque of the motor [lbm-in^2/s^2]
+  int32_t torque_desired;    //torque from the main controller task
+  float pwm_change;
+  float pwm_new = 0;
+
+  //Set up IPROPI pin for analog input
+  pinMode(PA_0,INPUT);
   
   for (;;)
   {
@@ -134,7 +154,38 @@ void task_stateController (void* p_params)
       // Dividing the encoder values by the period of the task yields the angular velocity of the motor.
       theta_dot = (encoder_new-encoder_old)/encoder_timing; 
 
-      // Insert Control Algorithm Code here
+      //Calculate the desired torque from the feedback gain matrix
+      torque_desired = K1*stateR + K2*r_dot + K3*theta + K4*theta_dot;
+      //Calculate the current being supplied to the motor
+      V_ipropi = analogRead(PA_0);
+      I_ipropi = V_ipropi/R_IPROPI; 
+      I_motor = 1000*I_ipropi;
+      //Calculate the torque that the motor is currently applying and compare to desired
+      torque_actual = I_motor*Kt_motor*(24.15);
+      //Determine pwm adjustment for any error between torque
+      pwm_change = (torque_desired - torque_actual)*Kp_gain_motor;
+      pwm_new += pwm_change;
+      //see if pwm value is positive or negative
+      if (pwm_new < 0)
+      {
+        //pwm max absolute value is 100
+        if(pwm_new < -100)
+        {
+          pwm_new = -100;
+        }
+        pwm_share.put(-pwm_new);      //put negative of pwm value and set direction bool (unsure if this sytax works)
+        pwm_direction_share.put(LOW); 
+      }
+      else
+      {
+        //pwm max absolute value is 100
+        if(pwm_new > 100)
+        {
+          pwm_new = 100;
+        }
+        pwm_share.put(pwm_new);
+        pwm_direction_share.put(HIGH);
+      } 
     }
 
   }
