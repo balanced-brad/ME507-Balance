@@ -94,8 +94,8 @@ void task_stateController (void* p_params)
   (void) p_params;                    // Does nothing but silences a compiler warning
   int16_t yaccel, zaccel, beam_angle; // values that hold the current y acceleration, z acceleration and beam angle.
   uint8_t state = 0;                  // State of the state machine
-  int16_t linpot_pos_old, linpot_pos_new;
-  int16_t encoder_old, encoder_new;
+  int16_t linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
+  int16_t encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
   int16_t stateR, r_dot, theta, theta_dot;
   float controller_period = 60;
 
@@ -104,16 +104,15 @@ void task_stateController (void* p_params)
   int16_t K3 = 899;   //Gain matrix element 3
   int8_t K4 = 86;     //Gain matrix element 4
 
-  uint8_t Kp_gain_motor = 0.01;  //Gain of the motor controller 
-  uint16_t R_IPROPI = 1800;   //Will be different for Bradley
+  uint8_t Kp_gain_motor = 0.01;  // Gain of the motor controller 
+  uint16_t R_IPROPI = 1800;      // Resistance value for current
   uint8_t V_ipropi;
-  float Kt_motor = 175.5;      //motor torque constant [ozf-in/A] (different for Bradley)
-  float I_ipropi;             //current in uA
-  float I_motor;              //current from the motor driver [A]
-  float torque_desired;       //torque desired from the motor [lbm-in^2/s^2] from feedback gain matrix
-  float torque_actual;        //actual torque of the motor [lbm-in^2/s^2]
-  int32_t torque_desired;    //torque from the main controller task
-  float pwm_change;
+  float Kt_motor = 175.5;        // motor torque constant [ozf-in/A]
+  float I_ipropi;                // current in uA
+  float I_motor;                 // current from the motor driver [A]
+  float torque_desired;          // torque desired from the motor [lbm-in^2/s^2] from feedback gain matrix
+  float torque_actual;           // actual torque of the motor [lbm-in^2/s^2]
+  float pwm_change;  
   float pwm_new = 0;
 
   //Set up IPROPI pin for analog input
@@ -128,18 +127,15 @@ void task_stateController (void* p_params)
       accelerations.get(yaccel);
       accelerations.get(zaccel);
       beam_angle = incline_angle(yaccel,zaccel);
-      duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees. 
+      duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
       if (beam_angle >= abs(1))   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
       {
-        state = 1;
-        // Insert code here that sets encoder values to zero
+        state = 1;  // Transition to control state
+        encoder_queue.get(encoder_calib);     // Set calibration value of encoder such that encoder ticks read at zero when the beam is flat.
       }
     }
     else if (state == 1)
     {
-      // Insert code here to read current position of encoder
-      // From here also calculate the velocity of the motor based on timing of encoder task
-      
       // Calculate states for the radial direction
       linearPot_queue.get(linpot_pos_new);   // Pull the newest value from the queue first
       linearPot_queue.get(linpot_pos_old);   // Pull the second newest value from the queue
@@ -149,7 +145,9 @@ void task_stateController (void* p_params)
 
       // Calculate states for the theta directions
       encoder_queue.get(encoder_new);     // Pull the newest value from the queue first
+      encoder_new -= encoder_calib;       // Adjust new encoder reading with calibration value
       encoder_queue.get(encoder_old);     // Pull the second newest value from the queue
+      encoder_old -= encoder_calib;       // Adjust old encoder reading with calibration value
       theta = encoder_new;                // The first pulled value is the most recently updated angle [rad]
       // Dividing the encoder values by the period of the task yields the angular velocity of the motor.
       theta_dot = (encoder_new-encoder_old)/encoder_timing; 
