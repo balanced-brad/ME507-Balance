@@ -173,8 +173,8 @@ void task_stateController (void* p_params)
         {
           pwm_new = -100;
         }
-        pwm_share.put(-pwm_new);      //put negative of pwm value and set direction bool (unsure if this sytax works)
-        pwm_direction_share.put(LOW); 
+        duty_cycle_share.put(-pwm_new);      //put negative of pwm value and set direction bool (unsure if this sytax works)
+        mot_dir_share.put(LOW); 
       }
       else
       {
@@ -183,8 +183,8 @@ void task_stateController (void* p_params)
         {
           pwm_new = 100;
         }
-        pwm_share.put(pwm_new);
-        pwm_direction_share.put(HIGH);
+        duty_cycle_share.put(pwm_new);
+        mot_dir_share.put(HIGH);
       } 
     }
 
