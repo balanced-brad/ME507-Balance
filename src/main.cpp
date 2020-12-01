@@ -27,7 +27,7 @@ float linear_pot_timing = 5;
 
 // Define shares and queues here
 
-Queue<int16_t> linearPot_queue (5);
+Queue<float> linearPot_queue (5);
 Queue<int16_t> encoder_queue (5);
 Queue<int16_t> accelerations (4);
 
@@ -94,7 +94,7 @@ void task_stateController (void* p_params)
   (void) p_params;                    // Does nothing but silences a compiler warning
   int16_t yaccel, zaccel, beam_angle; // values that hold the current y acceleration, z acceleration and beam angle.
   uint8_t state = 0;                  // State of the state machine
-  int16_t linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
+  float linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
   int16_t encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
   int16_t stateR, r_dot, theta, theta_dot;
   float controller_period = 12;
@@ -257,7 +257,7 @@ void task_linearpot (void* p_params)
   // Set up pin A1 as an input, so that the signal from the linear potentiometer can be read.
   pinMode(PA1, INPUT);
   uint16_t linpot_reading;      // Initialize analog voltage reading 
-  int16_t linpot_reading_inch;  // Initialize inch calculation for ball position.
+  float linpot_reading_inch;  // Initialize inch calculation for ball position.
 
   for(;;)
   {
