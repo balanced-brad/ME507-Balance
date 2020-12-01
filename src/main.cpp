@@ -208,7 +208,7 @@ void task_encoder (void* p_params)
   {
     curr_pos = timer_3.getCount(); // Get current position from encoder count
     curr_pos = curr_pos/PPR*2*PI;  // Normalize encoder tick reading and then multiply by 2PI to find position in terms of rads
-    linearPot_queue.put(curr_pos); // Place current position [rad] into queue
+    encoder_queue.put(curr_pos); // Place current position [rad] into queue
 
     vTaskDelay(encoder_timing);
   }
