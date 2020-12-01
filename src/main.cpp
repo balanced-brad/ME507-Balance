@@ -28,7 +28,7 @@ float linear_pot_timing = 5;
 // Define shares and queues here
 
 Queue<float> linearPot_queue (5);
-Queue<int16_t> encoder_queue (5);
+Queue<float> encoder_queue (5);
 Queue<int16_t> accelerations (4);
 
 Share<float> duty_cycle_share ("Duty Cycle");
@@ -95,18 +95,18 @@ void task_stateController (void* p_params)
   int16_t yaccel, zaccel, beam_angle; // values that hold the current y acceleration, z acceleration and beam angle.
   uint8_t state = 0;                  // State of the state machine
   float linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
-  int16_t encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
-  int16_t stateR, r_dot, theta, theta_dot;
+  float encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
+  float stateR, r_dot, theta, theta_dot;
   float controller_period = 12;
 
-  int8_t K1 = -78;    //Gain matrix element 1
-  int8_t K2 = -14;    //Gain matrix element 2
-  int16_t K3 = 899;   //Gain matrix element 3
-  int8_t K4 = 86;     //Gain matrix element 4
+  float K1 = -78;    // Gain matrix element 1
+  float K2 = -14;    // Gain matrix element 2
+  float K3 = 899;    // Gain matrix element 3
+  float K4 = 86;     // Gain matrix element 4
 
-  uint8_t Kp_gain_motor = 0.01;  // Gain of the motor controller 
-  uint16_t R_IPROPI = 1800;      // Resistance value for current
-  uint8_t V_ipropi;
+  float Kp_gain_motor = 0.01;  // Gain of the motor controller 
+  float R_IPROPI = 1800;      // Resistance value for current
+  float V_ipropi;
   float Kt_motor = 175.5;        // motor torque constant [ozf-in/A]
   float I_ipropi;                // current in uA
   float I_motor;                 // current from the motor driver [A]
@@ -142,7 +142,7 @@ void task_stateController (void* p_params)
       linearPot_queue.get(linpot_pos_old);   // Pull the second newest value from the queue
       stateR = linpot_pos_new;              // The first pulled value is the most recently updated position of the ball.
       // Dividing the positions by the period of the task yields the average velocity of the ball.
-      r_dot = (linpot_pos_new-linpot_pos_old)/(linear_pot_timing);
+      r_dot = (linpot_pos_new-linpot_pos_old)/(linear_pot_timing/1000);
 
       // Calculate states for the theta directions
       encoder_queue.get(encoder_new);     // Pull the newest value from the queue first
@@ -151,7 +151,7 @@ void task_stateController (void* p_params)
       encoder_old -= encoder_calib;       // Adjust old encoder reading with calibration value
       theta = encoder_new;                // The first pulled value is the most recently updated angle [rad]
       // Dividing the encoder values by the period of the task yields the angular velocity of the motor.
-      theta_dot = (encoder_new-encoder_old)/encoder_timing; 
+      theta_dot = (encoder_new-encoder_old)/(encoder_timing/1000); 
 
       //Calculate the desired torque from the feedback gain matrix
       torque_desired = K1*stateR + K2*r_dot + K3*theta + K4*theta_dot;
