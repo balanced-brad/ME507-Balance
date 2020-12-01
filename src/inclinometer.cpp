@@ -10,7 +10,8 @@
 
 /** @brief   Determines angle of IMU in the x axis.
  *  @details Performs calculation using two acceleration values to provide
- *           the angle in the x-direction ('Roll').
+ *           the angle in the x-direction ('Roll'). Note the values placed in the function
+ *           may vary on mounting orientation of IMU. Future iterations can accomodate for all angles.
  *  @param   yaccel Accelerometer reading in the y-direction
  *  @param   zaccel Accelerometer reading in the z-direction 
  */
