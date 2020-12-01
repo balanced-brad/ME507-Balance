@@ -256,13 +256,14 @@ void task_linearpot (void* p_params)
   (void) p_params; // Mute compiler warning for p_params.
   // Set up pin A1 as an input, so that the signal from the linear potentiometer can be read.
   pinMode(PA1, INPUT);
-  uint16_t linpot_reading;
+  uint16_t linpot_reading;      // Initialize analog voltage reading 
+  int16_t linpot_reading_inch;  // Initialize inch calculation for ball position.
 
   for(;;)
   {
     linpot_reading = analogRead(PA1);           // Read voltage reading from linear potentiometer
-    linpot_reading = linpot_reading/1023*12-6;    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
-    linearPot_queue.butt_in(linpot_reading);    // Store position of the ball on the beam into the front of the queue.
+    linpot_reading_inch = linpot_reading/1023*12-6;    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
+    linearPot_queue.butt_in(linpot_reading_inch);    // Store position of the ball on the beam into the front of the queue.
     vTaskDelay(linear_pot_timing);
   }
 }
