@@ -61,8 +61,8 @@ void task_IMU (void* p_params)
   int16_t calib_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
   int16_t calib_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
   int16_t calib_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
-  calib_z = 7000 - calib_z;  // z offset so that the accelerometer is set to read at 0 degrees when flat
-  calib_y = 0 - calib_y;  // y offset so that the accelerometer is set to read at 0 degrees when flat
+  // calib_z = 7000 - calib_z;  // z offset so that the accelerometer is set to read at 0 degrees when flat
+  // calib_y = 0 - calib_y;  // y offset so that the accelerometer is set to read at 0 degrees when flat
 
   // This loop will continuously measure the accelerometer values coming from the MPU 6050.
   for(;;)
@@ -128,7 +128,7 @@ void task_stateController (void* p_params)
       accelerations.get(zaccel);
       beam_angle = incline_angle(yaccel,zaccel);
       duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
-      if (abs(beam_angle) >= 1)   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
+      if (abs(beam_angle) <= 1)   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
       {
         state = 1;  // Transition to control state
         encoder_queue.get(encoder_calib);     // Set calibration value of encoder such that encoder ticks read at zero when the beam is flat.
