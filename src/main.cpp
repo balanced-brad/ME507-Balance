@@ -128,7 +128,7 @@ void task_stateController (void* p_params)
       accelerations.get(zaccel);
       beam_angle = incline_angle(yaccel,zaccel);
       duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
-      if (beam_angle >= abs(1))   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
+      if (abs(beam_angle) >= 1)   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
       {
         state = 1;  // Transition to control state
         encoder_queue.get(encoder_calib);     // Set calibration value of encoder such that encoder ticks read at zero when the beam is flat.
