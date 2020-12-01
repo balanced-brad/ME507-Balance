@@ -76,7 +76,7 @@ void task_IMU (void* p_params)
     int16_t accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
     accelerations.butt_in (accelerometer_z);
     accelerations.butt_in (accelerometer_y);
-    vTaskDelay(100);
+    vTaskDelay(5);
   }
 }
 
@@ -97,7 +97,7 @@ void task_stateController (void* p_params)
   int16_t linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
   int16_t encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
   int16_t stateR, r_dot, theta, theta_dot;
-  float controller_period = 60;
+  float controller_period = 12;
 
   int8_t K1 = -78;    //Gain matrix element 1
   int8_t K2 = -14;    //Gain matrix element 2
@@ -133,6 +133,7 @@ void task_stateController (void* p_params)
         state = 1;  // Transition to control state
         encoder_queue.get(encoder_calib);     // Set calibration value of encoder such that encoder ticks read at zero when the beam is flat.
       }
+      vTaskDelay(controller_period);
     }
     else if (state == 1)
     {
@@ -184,6 +185,7 @@ void task_stateController (void* p_params)
         duty_cycle_share.put(pwm_new);
         mot_dir_share.put(HIGH);
       } 
+      vTaskDelay(12);
     }
 
   }
@@ -238,6 +240,7 @@ void task_motorDriver (void* p_params)
     mot_dir_share.get(motor_direction); // This bool determines the direction which the motor should be driven in.
     digitalWrite(PA8, motor_direction);       // Set direction of motor
     analogWrite(PB10, duty_cycle_var);        // Run motor at this duty cycle
+    vTaskDelay(12);
   }
 }
 
@@ -260,6 +263,7 @@ void task_linearpot (void* p_params)
     linpot_reading = analogRead(PA1);           // Read voltage reading from linear potentiometer
     linpot_reading = linpot_reading/1023*12-6;    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
     linearPot_queue.butt_in(linpot_reading);    // Store position of the ball on the beam into the front of the queue.
+    vTaskDelay(linear_pot_timing);
   }
 }
 
@@ -274,7 +278,7 @@ void setup() {
                "Beam Position",
               1024,
               NULL,
-              4,
+              3,
               NULL);
   
   // Create Motor Driver Task
@@ -282,7 +286,7 @@ void setup() {
                "Motor Driver",
                1024,
                NULL,
-               3,
+               2,
                NULL);
 
   // Create Encoder Task
@@ -290,7 +294,7 @@ void setup() {
                "Motor Position",
                1536,
                NULL,
-               4,
+               3,
                NULL);
   
 
@@ -299,7 +303,7 @@ void setup() {
                "Beam Angle",
                1024,
                NULL,
-               4,
+               3,
                NULL);
 
   // Create State Controller Task
@@ -307,7 +311,7 @@ void setup() {
                "Full State Feedback Control",
                1536,
                NULL,
-               2,
+               5,
                NULL);
   
   vTaskStartScheduler ();
