@@ -256,7 +256,7 @@ void task_linearpot (void* p_params)
   (void) p_params; // Mute compiler warning for p_params.
   // Set up pin A1 as an input, so that the signal from the linear potentiometer can be read.
   pinMode(PA1, INPUT);
-  uint16_t linpot_reading;      // Initialize analog voltage reading 
+  float linpot_reading;      // Initialize analog voltage reading 
   float linpot_reading_inch;  // Initialize inch calculation for ball position.
 
   for(;;)
