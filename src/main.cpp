@@ -22,8 +22,8 @@
 #include <encoder_counter.h>
 
 // Define task timings here
-float encoder_timing = 5;
-float linear_pot_timing = 5;
+float encoder_timing = 20;
+float linear_pot_timing = 20;
 
 // Define shares and queues here
 
@@ -92,20 +92,20 @@ void task_IMU (void* p_params)
 void task_stateController (void* p_params)
 {
   (void) p_params;                    // Does nothing but silences a compiler warning
-  int16_t yaccel, zaccel, beam_angle; // values that hold the current y acceleration, z acceleration and beam angle.
-  uint8_t state = 1;                  // State of the state machine
+  int16_t yaccel, zaccel, beam_angle, beam; // values that hold the current y acceleration, z acceleration and beam angle.
+  uint8_t state = 0;                  // State of the state machine
   float linpot_pos_old, linpot_pos_new;  // Initialize values for linear potentiometer readings
   float encoder_old, encoder_new, encoder_calib;        // Initialize values for encoder tick readings and calibration values
   float stateR, r_dot, theta, theta_dot;
   float controller_period = 12;
 
-  int8_t K1 = -78;    //Gain matrix element 1
-  int8_t K2 = -140;    //Gain matrix element 2
-  int16_t K3 = 899;   //Gain matrix element 3
-  int8_t K4 = 86;     //Gain matrix element 4
+  int8_t K1 = -88;    //Gain matrix element 1 StateR -78
+  int8_t K2 = 100;    //Gain matrix element 2 r_dot -14
+  int16_t K3 = 1499;   //Gain matrix element 3 theta 899
+  int8_t K4 = -36;     //Gain matrix element 4 theta_dot 86
 
-  float Kp_gain_motor = 100;  // Gain of the motor controller 
-  uint16_t R_IPROPI = 1500;      // Resistance value for current
+  float Kp_gain_motor = 10000;  // Gain of the motor controller 
+  uint16_t R_IPROPI = 1490;      // Resistance value for current
   float V_ipropi;
   float Kt_motor = 175.5;        // motor torque constant [ozf-in/A]
   float I_ipropi;                // current in uA
@@ -114,8 +114,6 @@ void task_stateController (void* p_params)
   float torque_actual;           // actual torque of the motor [lbm-in^2/s^2]
   float pwm_change;  
   float pwm_new = 0;
-
-  //torque_desired = K1*stateR + K2*r_dot + K3*theta + K4*theta_dot;
 
   //Set up IPROPI pin for analog input
   pinMode(PA_0,INPUT);
@@ -128,8 +126,20 @@ void task_stateController (void* p_params)
       // Read current accelerometer values to get angle of beam
       accelerations.get(yaccel);
       accelerations.get(zaccel);
-      beam_angle = incline_angle(yaccel,zaccel);
-      duty_cycle_share.put(50);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
+      beam_angle = 180 - incline_angle(yaccel,zaccel);
+      //beam_angle = 0; // ----------------------------REMOVE---------------------------------------------------------
+      Serial << beam_angle << endl;
+      if (beam_angle < 180)
+      {
+        duty_cycle_share.put(30);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
+        mot_dir_share.put(HIGH); 
+      }
+      else if (beam_angle >= 180 )
+      {
+        duty_cycle_share.put(40);     // Make motor move slowly as it tries to find an angle close to 0 degrees.  [May need to adjust value to make it go slower]
+        mot_dir_share.put(LOW);
+      }
+
       if (abs(beam_angle) <= 1)   // If beam is +/- 1 degree relative to horizontal, begin control of beam.
       {
         state = 1;  // Transition to control state
@@ -144,7 +154,7 @@ void task_stateController (void* p_params)
       linearPot_queue.get(linpot_pos_old);   // Pull the second newest value from the queue
       stateR = linpot_pos_new;              // The first pulled value is the most recently updated position of the ball.
       // Dividing the positions by the period of the task yields the average velocity of the ball.
-      r_dot = 1000 * (linpot_pos_new-linpot_pos_old)/(linear_pot_timing);
+      r_dot = 1000 * (linpot_pos_new-linpot_pos_old)/(2 * linear_pot_timing);
       //Serial << endl << endl << "r_dot: " << r_dot << endl;
       //Serial << endl << "linpot_pos_old: " << linpot_pos_old << endl;
       //Serial << endl << "linpot_pos_new: " << linpot_pos_new << endl;
@@ -160,26 +170,31 @@ void task_stateController (void* p_params)
 
       //Calculate the desired torque from the feedback gain matrix
       torque_desired = K1*stateR + K2*r_dot + K3*theta + K4*theta_dot;
-      Serial << endl << endl << "torque_desired : " << torque_desired << endl;
+      //Serial << endl << endl << "torque_desired:                            " << torque_desired << endl;
+
+      Serial << endl << "stateR: " << stateR << " | r_dot: "
+             << r_dot << " | theta: " << theta << " | theta_dot: " << theta_dot << endl;
       //Calculate the current being supplied to the motor
       V_ipropi = analogRead(PA_0);
       I_ipropi = V_ipropi/R_IPROPI; 
       I_motor = I_ipropi;
       //Calculate the torque that the motor is currently applying and compare to desired
       torque_actual = I_motor*Kt_motor*(24.15);
-      Serial << endl << endl << "torque_actual : " << torque_actual << endl;
+      //Serial << endl << endl << "torque_actual:           " << torque_actual << endl;
 
       //Determine pwm adjustment for any error between torque
       pwm_change = (torque_desired - torque_actual)*Kp_gain_motor;
       pwm_new -= pwm_change;
-      
+      Serial << "                                                          pwm change:" << pwm_change;
+      Serial << "                                                                                      pwm new:" << pwm_new;
+      //Serial << endl << "PWM : " << pwm_new << endl;
       //see if pwm value is positive or negative
       if (pwm_new < 0)
       {
         //pwm max absolute value is 100
-        if(pwm_new < -100)
+        if(pwm_new < -40)
         {
-          pwm_new = -100;
+          pwm_new = -40;
         }
         duty_cycle_share.put(-pwm_new);      //put negative of pwm value and set direction bool (unsure if this sytax works)
         mot_dir_share.put(HIGH); 
@@ -187,14 +202,14 @@ void task_stateController (void* p_params)
       else
       {
         //pwm max absolute value is 100
-        if(pwm_new > 100)
+        if(pwm_new > 40)
         {
-          pwm_new = 100;
+          pwm_new = 40;
         }
         duty_cycle_share.put(pwm_new);
         mot_dir_share.put(LOW);
       } 
-      vTaskDelay(controller_period);
+      vTaskDelay(12);
     }
 
   }
@@ -211,13 +226,29 @@ void task_encoder (void* p_params)
 {
   (void) p_params;    // Does nothing but silences a compiler warning
   STM32Encoder timer_3 (TIM3, PB4, PB5);  // Initialize timer 3 channel 1 and channel 2 in encoder mode
-  int16_t curr_pos;        // Tick reading from encoder
-  const float PPR = 360*4;   // Define number of pulses per revolution for DC motor (multiplied by 4 to account for 2 channels reading in encoder mode)
+  float curr_pos;        // Tick reading from encoder
+  const float PPR = 360 * 4;   // Define number of pulses per revolution for DC motor
+  int32_t encoder_delta;
+  int16_t old_pos;
+  int16_t new_pos;
   for(;;) 
   {
-    curr_pos = timer_3.getCount(); // Get current position from encoder count
-    curr_pos = curr_pos/(PPR)*2*PI;  // Normalize encoder tick reading and then multiply by 2PI to find position in terms of rads
-    encoder_queue.put(curr_pos); // Place current position [rad] into queue
+    encoder_delta = timer_3.getCount() - (new_pos % 0xFFFF); // Difference between last and current position
+        if (encoder_delta > 0xFFFF/2)                         // Check for underflow
+        {
+            (encoder_delta -= (0xFFFF + 1));                   // Fixes underflow (for 16-bit encoder)
+        }   
+        else if (encoder_delta < -0xFFFF/2)                   // Check for overflow
+        {
+            encoder_delta += (0xFFFF + 1);                      //Fixes overflow (for 16-bit encoder)
+        }
+    old_pos = new_pos;                 // Advance second most recent encoder position
+    new_pos  = old_pos + encoder_delta;// Advance most recent coder position
+
+    //erial << endl << "encoder ticks: " << new_pos << endl;
+    curr_pos = new_pos/PPR*2*PI;   // Normalize encoder tick reading and then multiply by 2PI to find position in terms of rads
+    //Serial << endl << "encoder revs: " << curr_pos << endl;
+    encoder_queue.put(curr_pos);        // Place current position [rad] into queue
 
     vTaskDelay(encoder_timing);
   }
@@ -273,9 +304,10 @@ void task_linearpot (void* p_params)
     linpot_reading = analogRead(PA1);           // Read voltage reading from linear potentiometer
     //Serial << endl << endl << "Linear Pot Reading Raw: " << linpot_reading << endl;
 
-    linpot_reading_inch = ((linpot_reading/1023) - 0.07)*12 - 6;    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
+    linpot_reading_inch = ((linpot_reading/1023 - .2) * 17.647 - 6.8);    // Normalize the voltage value and multiply by the length of the beam. (Note: 0 in. actually signifies the center of the beam)
     //Serial << endl << endl << "Linear Pot Reading Cal             " << linpot_reading_inch << endl;
     linearPot_queue.butt_in(linpot_reading_inch);    // Store position of the ball on the beam into the front of the queue.
+    //Serial << endl << "Linear pos in: " << linpot_reading_inch << endl;
     vTaskDelay(linear_pot_timing);
   }
 }

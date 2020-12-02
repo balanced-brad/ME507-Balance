@@ -9,9 +9,9 @@ var main_8cpp =
     [ "task_stateController", "main_8cpp.html#a85cb4a0ff328214a627f134949b87f55", null ],
     [ "accelerations", "main_8cpp.html#a9a3f464639bca1ec335688ea2f628396", null ],
     [ "duty_cycle_share", "main_8cpp.html#a4a4fdeb88e15ca259f73aaf7cde540c2", null ],
-    [ "encoder_queue", "main_8cpp.html#ad09a9aafaf7e84f5ce0eb4199e1de341", null ],
+    [ "encoder_queue", "main_8cpp.html#a833fd5537248039d5bf98ea5c7ab5dbd", null ],
     [ "encoder_timing", "main_8cpp.html#a999d2baa12ad87e2f23c5b70c51165ae", null ],
     [ "linear_pot_timing", "main_8cpp.html#a22dba6843b8365cba71ee8d1bdbda2e5", null ],
-    [ "linearPot_queue", "main_8cpp.html#ac8e0305e7669354928c99c5e81033f26", null ],
+    [ "linearPot_queue", "main_8cpp.html#a2b9f99cdcaee40f5d0b9b54750f1ec06", null ],
     [ "mot_dir_share", "main_8cpp.html#af41f085dadb9eff49ca51bb35761fa73", null ]
 ];
